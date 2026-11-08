@@ -1,0 +1,9 @@
+crashbox
+Copyright 2026 the crashbox authors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The slot journal (ring of 4 KiB slots, CRC and separate commit word, fault
+slots kept apart from checkpoints) and its power-cut tests derive from the
+dashboard diagnostics component of the tesla_ble_ac7925b firmware, also
+licensed under the Apache License, Version 2.0.
