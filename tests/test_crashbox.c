@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define SLOTS 64u
 static uint8_t flash[CBX_SLOT_SIZE * SLOTS];
@@ -410,6 +412,44 @@ static void test_file_backend(void)
     CHECK(cbx_store_open(&reopened, &fio) == CBX_OK && reopened.valid_count == 0);
     cbx_file_close(&file);
     remove(path);
+
+    /* split mode: one file per slot, and a single file's reports carried over */
+    const char *dir = "crashbox_test_slots";
+    char slot0[64];
+    snprintf(slot0, sizeof(slot0), "%s/slot000.bin", dir);
+    for (unsigned i = 0; i < 8; ++i) {
+        char p[64];
+        snprintf(p, sizeof(p), "%s/slot%03u.bin", dir, i);
+        remove(p);
+    }
+    rmdir(dir);
+    CHECK(cbx_file_open(&file, path, 8u * CBX_SLOT_SIZE, &fio) == CBX_OK);
+    CHECK(cbx_store_open(&store, &fio) == CBX_OK);
+    for (unsigned i = 0; i < 5; ++i) {
+        build_report(CBX_REASON_CHECKPOINT, 0, 0);
+        CHECK(cbx_store_append(&store, &report, NULL) == CBX_OK);
+    }
+    cbx_file_close(&file);
+    CHECK(cbx_file_open_split(&file, dir, 8u * CBX_SLOT_SIZE, path, &fio) == CBX_OK && fio.erase == NULL);
+    CHECK(access(path, F_OK) != 0);                                   /* legacy file migrated, removed */
+    CHECK(cbx_store_open(&reopened, &fio) == CBX_OK && reopened.valid_count == 5 && reopened.newest_sequence == 5);
+    for (unsigned i = 0; i < 20; ++i) {
+        build_report(i % 5 ? CBX_REASON_CHECKPOINT : CBX_REASON_EXCEPTION, 0, 0);
+        CHECK(cbx_store_append(&reopened, &report, NULL) == CBX_OK);
+    }
+    cbx_file_close(&file);
+    struct stat st;
+    CHECK(stat(slot0, &st) == 0 && st.st_size == (off_t)CBX_SLOT_SIZE);
+    CHECK(cbx_file_open_split(&file, dir, 8u * CBX_SLOT_SIZE, path, &fio) == CBX_OK);
+    CHECK(cbx_store_open(&store, &fio) == CBX_OK && store.newest_sequence == 25 && store.valid_count == 8);
+    CHECK(cbx_store_read(&store, 25, &output) == CBX_OK && strstr(output.text, "file backend"));
+    cbx_file_close(&file);
+    for (unsigned i = 0; i < 8; ++i) {
+        char p[64];
+        snprintf(p, sizeof(p), "%s/slot%03u.bin", dir, i);
+        remove(p);
+    }
+    rmdir(dir);
 }
 
 int main(void)
