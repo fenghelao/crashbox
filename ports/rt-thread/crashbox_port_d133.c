@@ -33,7 +33,8 @@
 
 #ifdef LPKG_USING_CRASHBOX
 
-#define CBX_FILE            "/data/crashbox.bin"
+#define CBX_FILE            "/data/crashbox.bin"     /* old single file: migrated, then removed */
+#define CBX_DIR             "/data/crashbox"         /* one 4 KiB file per slot (see crashbox_file.h) */
 #define CBX_FILE_SIZE       (64u * CBX_SLOT_SIZE)
 #define CBX_HTTP_PORT       8090
 #define CBX_CHECKPOINT_MIN  30
@@ -285,8 +286,8 @@ static void cbx_thread(void *arg)
     for (i = 0; i < 50 && !dfs_filesystem_lookup("/data"); i++)   /* data_fs.c may format it first */
         rt_thread_mdelay(100);
     memset(&cfg, 0, sizeof(cfg));
-    if (cbx_file_open(&file, CBX_FILE, CBX_FILE_SIZE, &cfg.io) != CBX_OK) {
-        rt_kprintf("cbx: cannot open %s\n", CBX_FILE);
+    if (cbx_file_open_split(&file, CBX_DIR, CBX_FILE_SIZE, CBX_FILE, &cfg.io) != CBX_OK) {
+        rt_kprintf("cbx: cannot open %s\n", CBX_DIR);
         return;
     }
     snprintf(g_firmware, sizeof(g_firmware), "d133 %s %s", __DATE__, __TIME__);

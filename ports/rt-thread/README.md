@@ -2,7 +2,9 @@
 
 `crashbox_port_d133.c` 是实际在 D133EBS 盒子上运行的板级适配，可按它改到别的 RT-Thread 板子：
 
-- 存储：`/data/crashbox.bin`（littlefs，256 KiB），`cbx_file_open()`。
+- 存储：`/data/crashbox/` 下每个槽一个 4 KiB 文件（littlefs，共 64 个），`cbx_file_open_split()`。
+  不要用单个 256 KiB 文件：littlefs 改写文件中间会把后面的数据整体重写，写一条记录要十几秒，
+  期间占着文件系统锁，别的线程读 `/data` 都要等。旧的 `/data/crashbox.bin` 首次启动时自动迁移后删除。
 - 控制台旁路：注册一个 `cbxcon` 设备接管 `rt_console`，所有打印（去掉颜色码）同时写进日志环，
   再转给原串口。两个坑：`rt_console_set_device()` 会关掉原设备，切换前要先多打开一次原串口；
   finsh 从控制台设备读输入，旁路设备必须把 open/close/read/control 和接收通知都直通给原串口。

@@ -36,7 +36,9 @@ tests/                      主机测试（NOR 写规则、逐字节掉电、损
 ## 快速移植
 
 1. 提供存储：裸 Flash 分区填 `cbx_io_t` 的 read / write / erase（4 KiB 擦除单位）；
-   有文件系统就用 `cbx_file_open()`。区域大小为 16 KiB ~ 1 MiB，4 KiB 对齐。
+   有文件系统就用 `cbx_file_open()`（一个文件）；littlefs 上用 `cbx_file_open_split()`（每槽一个
+   文件：littlefs 改写大文件中间会重写其后全部数据，单文件写一条记录可达十几秒）。
+   区域大小为 16 KiB ~ 1 MiB，4 KiB 对齐。
 2. 填 `cbx_service_config_t`：存储、固件名、本次复位原因、时钟、锁；有热复位保留 RAM 就给
    `crash` 和 `text` 指过去。
 3. 开机调用 `cbx_service_start()`，后台低优先级任务每秒调 `cbx_service_poll()`。
