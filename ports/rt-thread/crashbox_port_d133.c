@@ -105,8 +105,46 @@ static rt_size_t tee_write(rt_device_t dev, rt_off_t pos, const void *buffer, rt
     return g_console ? rt_device_write(g_console, pos, buffer, size) : size;
 }
 
+/* Everything else goes straight to the UART: finsh reads its input from the
+ * console device (rt_console_get_device()), so the tee must pass reads, the
+ * open flags (INT_RX) and the receive notification through. */
+static rt_err_t tee_rx_ind(rt_device_t dev, rt_size_t size)
+{
+    (void)dev;
+    return g_tee.rx_indicate ? g_tee.rx_indicate(&g_tee, size) : RT_EOK;
+}
+
+static rt_err_t tee_open(rt_device_t dev, rt_uint16_t oflag)
+{
+    rt_err_t result;
+
+    (void)dev;
+    result = rt_device_open(g_console, oflag);
+    if (result == RT_EOK)
+        rt_device_set_rx_indicate(g_console, tee_rx_ind);
+    return result;
+}
+
+static rt_err_t tee_close(rt_device_t dev)
+{
+    (void)dev;
+    return rt_device_close(g_console);
+}
+
+static rt_size_t tee_read(rt_device_t dev, rt_off_t pos, void *buffer, rt_size_t size)
+{
+    (void)dev;
+    return rt_device_read(g_console, pos, buffer, size);
+}
+
+static rt_err_t tee_control(rt_device_t dev, int cmd, void *args)
+{
+    (void)dev;
+    return rt_device_control(g_console, cmd, args);
+}
+
 #ifdef RT_USING_DEVICE_OPS
-static const struct rt_device_ops tee_ops = {RT_NULL, RT_NULL, RT_NULL, RT_NULL, tee_write, RT_NULL};
+static const struct rt_device_ops tee_ops = {RT_NULL, tee_open, tee_close, tee_read, tee_write, tee_control};
 #endif
 
 /* ---- before drv_wri_init() clears the reset flags ---- */
@@ -158,7 +196,11 @@ static int cbx_port_early(void)
 #ifdef RT_USING_DEVICE_OPS
     g_tee.ops = &tee_ops;
 #else
+    g_tee.open = tee_open;
+    g_tee.close = tee_close;
+    g_tee.read = tee_read;
     g_tee.write = tee_write;
+    g_tee.control = tee_control;
 #endif
     g_console = rt_console_get_device();
     /* rt_console_set_device() closes the old console: hold one more reference so
@@ -188,6 +230,9 @@ void crashbox_port_crash(uint32_t reason, uint32_t pc, uint32_t lr, uint32_t sp,
     if (t)
         strncpy(c.task, t->name, CBX_TASK_SIZE - 1);
     cbx_crash_record(&R->crash, &c);
+    /* The SRAM is cached and the reset follows within a second: write the record
+     * and the last log lines back now, or they die dirty in the D-cache. */
+    aicos_dcache_clean_range((void *)R, sizeof(*R));
 }
 
 /* ---- service ---- */

@@ -4,7 +4,10 @@
 
 - 存储：`/data/crashbox.bin`（littlefs，256 KiB），`cbx_file_open()`。
 - 控制台旁路：注册一个 `cbxcon` 设备接管 `rt_console`，所有打印（去掉颜色码）同时写进日志环，
-  再转给原串口。注意 `rt_console_set_device()` 会关掉原设备，切换前要先多打开一次原串口。
+  再转给原串口。两个坑：`rt_console_set_device()` 会关掉原设备，切换前要先多打开一次原串口；
+  finsh 从控制台设备读输入，旁路设备必须把 open/close/read/control 和接收通知都直通给原串口。
+- 保留 SRAM 有 D-cache：异常/看门狗中断里写完崩溃记录要 `aicos_dcache_clean_range()`，
+  否则复位后记录丢在缓存里。
 - 热复位保留 RAM：链接脚本里把 SRAM 顶部划出堆（Luban-Lite `AIC_SRAM_RETAIN_SIZE`），
   崩溃记录和 4 KiB 日志环放在那里。哪段 SRAM 跨看门狗复位保留要在板子上实测
   （D133：`0x30110000`–`0x30134000` 完整保留，更高处被启动代码零散改写）。
